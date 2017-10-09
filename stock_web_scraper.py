@@ -11,6 +11,7 @@ John DeNero and the CS61A course.
 
 import requests
 import pandas as pd
+from prettytable import PrettyTable
 
 ################
 # LINE PARSING #
@@ -83,10 +84,10 @@ class Stock:
 			else:
 				unsuccessful += [data]
 		if successful:
-			print("{0} succesfully added to {1} stock investigation".format(
+			print("\033[92m{0} succesfully added to {1} stock investigation\033[0m".format(
 				successful, self.symbol))
 		if unsuccessful:
-			print("{0} are not data points currently allowed".format(unsuccessful))
+			print("\033[91m{0} are not data points currently allowed\033[0m".format(unsuccessful))
 
 	def remove_data_points(self, data_points_string):
 		data_points = data_points_string.split()
@@ -98,30 +99,42 @@ class Stock:
 			else:
 				unsuccessful += [data]
 		if successful:
-			print("{0} succesfully removed from {1} stock investigation".format(
+			print("\033[92m{0} succesfully removed from {1} stock investigation\033[0m".format(
 				successful, self.symbol))
 		if unsuccessful:
-			print("{0} were not found".format(unsuccessful))
+			print("\033[91m{0} were not found\033[0m".format(unsuccessful))
 
 	def generate_report(self):
 		if not self.data_points:
-			print("You have not selected any data points")
+			print("\033[93m You have not selected any data points \033[0m")
 			return
 		s = ""
 		for data in self.data_points:
 			s += data
 		url = "http://finance.yahoo.com/d/quotes.csv?s={0}&f={1}".format(self.symbol, s)
-		self.report = pd.read_csv(url, header = None, names = self.data_points)
-		print("Report succesfully generated. Use @status to check values")
+		file = requests.get(url).content.decode("utf-8")
+		file_in_list = file.split(",")
+		for pos in range(len(file_in_list)):
+			if "\n" in file_in_list[pos]:
+				file_in_list[pos] = file_in_list[pos][:len(file_in_list[pos]) - 1]
+			# file_in_list[pos] = "\033[92m" + file_in_list[pos] + "\033[0m"
+		data_table = PrettyTable(["\033[96m" + DATA_POINTS_AVAILABLE[data] + "\033[0m"
+			for data in self.data_points])
+		# data_table.column_headers = ["\033[92m" + DATA_POINTS_AVAILABLE[data] + "\u001b[37m"
+		# for data in self.data_points]
+		data_table.add_row(file_in_list)
 
+		self.report = data_table
+		
 
 	def __repr__(self):
 
 		string = """
-		Symbol: {0}\n
-		Data Points: {1}
+		\033[96mSymbol:\033[0m {0}\n
+		\033[96mData Points:\033[0m {1}
 		""".format(self.symbol, self.data_points)
 		string += "\n"
+		self.generate_report()
 		string += str(self.report)
 		return string
 
@@ -133,27 +146,16 @@ class StockList:
 	def add_stock(self, symbol):
 		symbol = symbol.upper()
 		if self.current_stock and symbol == self.current_stock.symbol:
-			print("You are already currently investigating {0}".format(symbol))
+			print("\033[93mYou are already currently investigating {0}\033[0m".format(symbol))
 		elif symbol in self.history:
 			self.current_stock = self.history[symbol]
-			print("You already have {0} in history. Stock under investigation is now {0}"
+			print("You already have {0} in history.\n\033[92mStock under investigation is now {0}\033[0m"
 				.format(symbol))
 		else:
 			new_stock = Stock(symbol)
 			self.history[symbol] = new_stock
 			self.current_stock = new_stock
-			print("Changed stock under investigation to {0}".format(symbol))
-
-####################
-# BACKEND ANALYSIS #	
-####################
-
-def generate_url():
-	url = ""
-	return
-
-def generate_csv():
-	return
+			print("\033[92mChanged stock under investigation to {0}\033[0m".format(symbol))
 
 
 ############
@@ -166,31 +168,19 @@ def status():
 	else:
 		print(history_of_stocks.current_stock)
 
-def stock():
-	if history_of_stocks.current_stock == None:
-		print("You have not yet selected a stock. Use @change to select a stock")
-	else:
-		print("Stock under investigation: {0}".format(history_of_stocks.current_stock.symbol))
-
-def data():
-	if history_of_stocks.current_stock == None:
-		print("You have not yet selected a stock. Use @change to select a stock")
-	else:
-		print("Data Points under investigation: {0}".format(
-			history_of_stocks.current_stock.data_points))
 def remove(data_points_to_remove):
 	if history_of_stocks.current_stock == None:
-		print("You have not yet selected a stock. Use @change to select a stock")
+		print("You have not yet selected a stock. Use @stock to select a stock")
 	else:
 		history_of_stocks.current_stock.remove_data_points(data_points_to_remove)
 
 def add(data_points_to_add):
 	if history_of_stocks.current_stock == None:
-		print("You have not yet selected a stock. Use @change to select a stock")
+		print("You have not yet selected a stock. Use @stock to select a stock")
 	else:
 		history_of_stocks.current_stock.add_data_points(data_points_to_add)
 
-def change(new_stock):
+def stock(new_stock):
 	history_of_stocks.add_stock(new_stock)
 
 def help():
@@ -201,11 +191,6 @@ def help():
 def history():
 	print(list(history_of_stocks.history.keys()))
 
-def generate():
-	if history_of_stocks.current_stock == None:
-		print("You have not yet selected a stock. Use @change to select a stock")
-	else:
-		history_of_stocks.current_stock.generate_report()	
 
 
 #################
@@ -214,54 +199,68 @@ def generate():
 
 COMMAND_FORMATS = {
     '@status': '  Shows you current status',
-    '@stock': '   Shows stock you are investigating',
-    '@data': '    Shows data points you are investigating',
     '@remove': '  Remove data points',
     "@add": "     Add data points",    
-    '@change': '  Change stock under investigation',
+    '@stock': '  Change stock under investigation',
     '@help': '    Access Help menu',
     "@history": " Access past searches",
     "@exit": "    Exit the web scraper",
-    "@generate": "Generate graph will all data",
 }
 
 COMMAND_NUM_ARGS = {
     '@status': 0,
-    '@stock': 0,
-    '@data': 0,
     '@remove': 1,
     "@add": 1,
-    '@change': 1,
+    '@stock': 1,
     '@help': 0,
     "@history": 0,
-    "@generate": 0,
 }
 
 SPECIAL_FORMS = {
     '@status': status,
-    '@stock': stock,
-    '@data': data,
     '@remove': remove,
     "@add": add,
-    '@change': change,
+    '@stock': stock,
     '@help': help,
     "@history": history,
-    "@generate": generate,
 }
 
-DATA_POINTS_AVAILABLE = (
-	"a","b","b2","b3","p","o","y","d","r1",
-	"q","c1","c","c6","k2","p2","d1","d2",
-	"t1","c8","c3","h","k1","l","l1","t8",
-	"m5","m6","m7","m8","m3","m4","w1","w4",
-	"p1","m","m2","g1","g3","g4","g5","g6",
-	"t7","t6","i5","l2","l3","v1","v7","s6",
-	"k","j","j5","k4","j6","k5","w","v",
-	"j1","j3","f6","n","n4","s","s1","x",
-	"j2","v","a5","b6","k3","a2","e","e7",
-	"e8","e9","b4","j4","p5","p6","r","r2",
-	"r5","r6","r7","s7"
-)
+DATA_POINTS_AVAILABLE = {
+	"a": "Ask","b": "Bid","b2": "Ask (realtime)","b3": "Bid (realtime)","p": "Previous Close"
+	,"o": "Open","y": "Dividend Yield","d": "Dividend per Share"
+	,"r1": "Dividend Pay Date",
+	"q": "Ex-Divident Date","c1": "Change","c": "Change & Percent Change","c6": "Change (realtime)"
+	,"k2": "Change Percent (realtime)","p2": "Change in Percent","d1": "Last Trade Date"
+	,"d2": "Trade Date",
+	"t1": "Last Trade Time","c8": "After Hours Change (realtime)","c3": "Commission", "g": "Day's Low",
+	"h": "Day's High","k1": "Last Trade (realtime) with Time","l": "Last Trade (With Time)",
+	"l1": "Last Trade (Price Only)"
+	,"t8": "1yr Target Price",
+	"m5": "Change From 200 Day Moving Average","m6": "Percent Change From 200 Day Moving Average"
+	,"m7": "Change From 50 Day Moving Average","m8": "Percent Change From 50 Day Moving Average"
+	,"m3": "50 Day Moving Average","m4": "200 Day Moving Average","w1": "Day’s Value Change"
+	,"w4": "Day’s Value Change (realtime)",
+	"p1": "Price Paid","m": "Day's Range","m2": "Day's Range (realtime)","g1": "Holdings Gain Percent"
+	,"g3": "Annualized Gains","g4": "Holdings Gain","g5": "Holdings Gain Percent (realtime)"
+	,"g6": "Holdings Gain (realtime)",
+	"t7": "Ticker Trend","t6": "Trade Links","i5": "Order Book (realtime)","l2": "High Limit"
+	,"l3": "Low Limit","v1": "Holdings Value","v7": "Holdings Value (realtime)"
+	,"s6": "Revenue",
+	"k": "52 Week High","j": "52 Week Low","j5": "Change from 52 Week Low","k4": "Change from 52 Week High"
+	,"j6": "Percent Change from 52 Week Low","k5": "Percent Change from 52 Week High","w": "52 Week Range"
+	,"v": "Volume",
+	"j1": "Market Capitalization","j3": "Market Cap (realtime)","f6": "Float Shares","n": "Name"
+	,"n4": "Notes","s": "Symbol","s1": "Shares Owned"
+	,"x": "Stock Exchange",
+	"j2": "Shares Outstanding","v": "Volume","a5": "Ask Size","b6": "Bid Size","k3": "Last Trade Size"
+	,"a2": "Average Daily Volume","e": "Earnings Per Share"
+	,"e7": "EPS Estimate Current Year",
+	"e8": "EPS Estimate Next Year","e9": "EPS Estimate Next Quarter","b4": "Book Value","j4": "EBITDA"
+	,"p5": "Price / Sales","p6": "Price / Book","r": "P/E Ratio"
+	,"r2": "P/E Ratio (realtime)",
+	"r5": "PEG Ratio","r6": "Price / EPS Estimate Current Year","r7": "Price / EPS Estimate Next Year"
+	,"s7": "Short Ratio"
+}
 #################
 # PROGRAM START #
 #################
